@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Detail - Freelance Marketplace</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="logo">Freelance Marketplace</a>
+        <div class="nav-links">
+            <a href="/">Jobs</a>
+            <a href="/post-job">Post Job</a>
+            <a href="/dashboard/employer">Employer</a>
+            <a href="/dashboard/freelancer">Freelancer</a>
+            <a href="/arbitrator">Arbitrator</a>
+        </div>
+        <div class="wallet-section">
+            <span id="walletAddress"></span>
+            <button id="connectWalletBtn" onclick="connectWallet()">Connect Wallet</button>
+        </div>
+    </nav>
+    <div id="notifications"></div>
+    <main class="container">
+        <div id="jobContent">
+            <p class="loading-text">Loading job details...</p>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+    <script src="/static/js/web3_connect.js"></script>
+    <script src="/static/js/employer.js"></script>
+    <script src="/static/js/freelancer.js"></script>
+    <script>
+        const JOB_ID = "{{ job_id }}";
+        let jobData = null;
+
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function loadJobDetail() {
+            try {
+                const resp = await fetch(`/api/job/${JOB_ID}`);
+                if (!resp.ok) throw new Error("Job not found");
+                jobData = await resp.json();
+                renderJob();
+            } catch (err) {
+                document.getElementById("jobContent").innerHTML =
+                    '<p class="loading-text">Failed to load job. It may not exist.</p>';
+                console.error(err);
+            }
+        }
+
+        function renderJob() {
+            const job = jobData;
+            const budgetEth = weiToEth(job.totalBudget || job.budget || "0");
+            const status = parseInt(job.status || 0);
+            const isEmployer = userAccount && userAccount.toLowerCase() === (job.employer || "").toLowerCase();
+            const isFreelancer = userAccount && userAccount.toLowerCase() === (job.acceptedFreelancer || "").toLowerCase();
+            const milestones = job.milestones || [];
+            const bids = job.bids || [];
+            const completedMs = milestones.filter(m => m.isCompleted || m.completed).length;
+            const paidMs = milestones.filter(m => m.isPaid || m.paid).length;
+            const progressPct = milestones.length > 0 ? Math.round((completedMs / milestones.length) * 100) : 0;
+
+            let html = `
+                <div class="card">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+                        <div>
+                            <h1>${escapeHtml(job.title || "Untitled Job")}</h1>
+                            <div style="margin:0.5rem 0;">
+                                <span class="category-badge">${escapeHtml(job.category || "Other")}</span>
+                                ${statusBadge(status)}
+                            </div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="budget" style="font-size:1.5rem;">${budgetEth} ETH</div>
+                        </div>
+                    </div>
+                    <div class="card-meta" style="margin-top:1rem;">
+                        <span>Employer: ${shortAddress(job.employer)}</span>
+                        <span>Freelancer: ${shortAddress(job.acceptedFreelancer)}</span>
+                        <span>Deadline: ${formatTimestamp(job.deadline)}</span>
+                        <span>Job ID: ${job.jobId}</span>
+                    </div>
+            `;
+
+            // Employer cancel button (only if Open)
+            if (isEmployer && status === 0) {
+                html += `<div style="margin-top:1rem;">
+                    <button class="btn btn-danger" onclick="handleCancelJob()">Cancel Job</button>
+                </div>`;
+            }
+
+            // Dispute button (employer or freelancer, if InProgress)
+            if ((isEmployer || isFreelancer) && status === 1) {
+                html += `<div style="margin-top:1rem;">
+                    <button class="btn btn-warning" onclick="handleRaiseDispute()">Raise Dispute</button>
+                </div>`;
+            }
+
+            html += `</div>`;
+
+            // Milestone Tracker
+            html += `
+                <div class="card">
+                    <h2>Milestones</h2>
+                    <div class="milestone-tracker">
+                        <div class="milestone-progress-bar">
+                            <div class="milestone-progress-fill" style="width:${progressPct}%"></div>
+                        </div>
+                        <p style="font-size:0.85rem;color:var(--color-text-light);margin-bottom:1rem;">
+                            ${completedMs} of ${milestones.length} completed, ${paidMs} paid
+                        </p>
+            `;
+
+            milestones.forEach((ms, i) => {
+                const isDone = ms.isCompleted || ms.completed;
+                const isPaid = ms.isPaid || ms.paid;
+                const checkClass = isPaid ? "paid" : (isDone ? "done" : "");
+                const checkSymbol = isPaid ? "$" : (isDone ? "&#10003;" : (i + 1));
+                const msAmountEth = weiToEth(ms.amount || "0");
+
+                html += `<div class="milestone-item">
+                    <div class="milestone-check ${checkClass}">${checkSymbol}</div>
+                    <div class="milestone-info">
+                        <div class="ms-desc">${escapeHtml(ms.description || "Milestone " + (i + 1))}</div>
+                        <div class="ms-amount">${msAmountEth} ETH ${isPaid ? "(Paid)" : isDone ? "(Completed)" : "(Pending)"}</div>
+                    </div>
+                    <div class="milestone-actions">`;
+
+                // Freelancer: mark complete button
+                if (isFreelancer && !isDone && status === 1) {
+                    html += `<button class="btn btn-success btn-sm" onclick="handleMarkComplete(${i})">Mark Complete</button>`;
+                }
+                // Employer: release payment button
+                if (isEmployer && isDone && !isPaid && (status === 1 || status === 2)) {
+                    html += `<button class="btn btn-primary btn-sm" onclick="handleReleasePayment(${i})">Release Payment</button>`;
+                }
+
+                html += `</div></div>`;
+            });
+
+            // Employer: Release All button
+            if (isEmployer && (status === 1 || status === 2) && completedMs > 0) {
+                html += `<div style="margin-top:1rem;">
+                    <button class="btn btn-success" onclick="handleReleaseAll()">Release All Payments</button>
+                </div>`;
+            }
+
+            html += `</div></div>`;
+
+            // Rating section (employer only, if completed)
+            if (isEmployer && status === 2) {
+                html += `
+                    <div class="card">
+                        <h2>Rate Freelancer</h2>
+                        <p style="margin-bottom:0.75rem;color:var(--color-text-light);">How was your experience working with this freelancer?</p>
+                        <div class="star-rating">
+                            <input type="radio" id="star5" name="rating" value="5" /><label for="star5" title="5 stars"></label>
+                            <input type="radio" id="star4" name="rating" value="4" /><label for="star4" title="4 stars"></label>
+                            <input type="radio" id="star3" name="rating" value="3" /><label for="star3" title="3 stars"></label>
+                            <input type="radio" id="star2" name="rating" value="2" /><label for="star2" title="2 stars"></label>
+                            <input type="radio" id="star1" name="rating" value="1" /><label for="star1" title="1 star"></label>
+                        </div>
+                        <button class="btn btn-primary btn-sm" style="margin-top:0.75rem;" onclick="handleRate()">Submit Rating</button>
+                    </div>
+                `;
+            }
+
+            // Bids Section
+            html += `<div class="card"><h2>Bids (${bids.length})</h2>`;
+
+            if (bids.length === 0) {
+                html += `<p style="color:var(--color-text-light);">No bids yet.</p>`;
+            } else {
+                bids.forEach(bid => {
+                    const bidAmountEth = weiToEth(bid.amount || "0");
+                    const bidStatus = parseInt(bid.status || 0);
+                    html += `
+                        <div class="bid-item">
+                            <div class="bid-details">
+                                <div style="display:flex;gap:0.75rem;align-items:center;">
+                                    <span class="bid-amount">${bidAmountEth} ETH</span>
+                                    ${statusBadge(bidStatus, "bid")}
+                                </div>
+                                <div class="bid-proposal">${escapeHtml(bid.proposal || "")}</div>
+                                <div style="font-size:0.8rem;color:var(--color-text-light);margin-top:0.25rem;">
+                                    Freelancer: ${shortAddress(bid.freelancer)} | Expires: ${formatTimestamp(bid.expiryTime || bid.expiry)}
+                                </div>
+                            </div>
+                            <div class="bid-actions">`;
+
+                    // Employer: accept/reject if job is Open and bid is Pending
+                    if (isEmployer && status === 0 && bidStatus === 0) {
+                        html += `
+                            <button class="btn btn-success btn-sm" onclick="handleAcceptBid(${bid.bidId})">Accept</button>
+                            <button class="btn btn-danger btn-sm" onclick="handleRejectBid(${bid.bidId})">Reject</button>
+                        `;
+                    }
+
+                    // Freelancer who owns this bid: withdraw if expired
+                    if (userAccount && userAccount.toLowerCase() === (bid.freelancer || "").toLowerCase() && bidStatus === 3) {
+                        html += `<button class="btn btn-secondary btn-sm" onclick="handleWithdrawBid(${bid.bidId})">Withdraw</button>`;
+                    }
+
+                    html += `</div></div>`;
+                });
+            }
+
+            html += `</div>`;
+
+            // Submit Bid Form (only if Open and user is not employer)
+            if (status === 0 && !isEmployer) {
+                html += `
+                    <div class="card">
+                        <h2>Submit a Bid</h2>
+                        <form onsubmit="handleSubmitBid(event)">
+                            <div class="form-group">
+                                <label for="bidAmount">Bid Amount (ETH)</label>
+                                <input type="number" id="bidAmount" step="0.001" min="0.001" required placeholder="e.g. 1.5" />
+                            </div>
+                            <div class="form-group">
+                                <label for="bidProposal">Proposal</label>
+                                <textarea id="bidProposal" required placeholder="Describe your approach, experience, and timeline..."></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="bidDuration">Bid Valid For (days)</label>
+                                <input type="number" id="bidDuration" min="1" max="30" value="7" required />
+                            </div>
+                            <button type="submit" class="btn btn-primary">Submit Bid</button>
+                        </form>
+                    </div>
+                `;
+            }
+
+            document.getElementById("jobContent").innerHTML = html;
+        }
+
+        // Action handlers
+        async function handleCancelJob() {
+            if (!confirm("Are you sure you want to cancel this job?")) return;
+            try {
+                await cancelJob(JOB_ID);
+                setTimeout(() => loadJobDetail(), 2000);
+            } catch (err) { /* shown by cancelJob */ }
+        }
+
+        async function handleRaiseDispute() {
+            if (!confirm("Raise a dispute for this job? An arbitration panel will review.")) return;
+            try {
+                await raiseDispute(JOB_ID);
+                setTimeout(() => loadJobDetail(), 2000);
+            } catch (err) { /* shown */ }
+        }
+
+        async function handleMarkComplete(milestoneId) {
+            try {
+                await markMilestoneComplete(JOB_ID, milestoneId);
+                setTimeout(() => loadJobDetail(), 2000);
+            } catch (err) { /* shown */ }
+        }
+
+        async function handleReleasePayment(milestoneId) {
+            try {
+                await releaseMilestonePayment(JOB_ID, milestoneId);
+                setTimeout(() => loadJobDetail(), 2000);
+            } catch (err) { /* shown */ }
+        }
+
+        async function handleReleaseAll() {
+            if (!confirm("Release payments for all completed milestones?")) return;
+            try {
+                await releaseAllPayments(JOB_ID);
+                setTimeout(() => loadJobDetail(), 2000);
+            } catch (err) { /* shown */ }
+        }
+
+        async function handleRate() {
+            const selected = document.querySelector('input[name="rating"]:checked');
+            if (!selected) {
+                showTxError("Please select a rating.");
+                return;
+            }
+            try {
+                await rateFreelancer(JOB_ID, parseInt(selected.value));
+                setTimeout(() => loadJobDetail(), 2000);
+            } catch (err) { /* shown */ }
+        }
+
+        async function handleAcceptBid(bidId) {
+            try {
+                await acceptBid(JOB_ID, bidId);
+                setTimeout(() => loadJobDetail(), 2000);
+            } catch (err) { /* shown */ }
+        }
+
+        async function handleRejectBid(bidId) {
+            try {
+                await rejectBid(bidId);
+                setTimeout(() => loadJobDetail(), 2000);
+            } catch (err) { /* shown */ }
+        }
+
+        async function handleWithdrawBid(bidId) {
+            try {
+                await withdrawExpiredBid(bidId);
+                setTimeout(() => loadJobDetail(), 2000);
+            } catch (err) { /* shown */ }
+        }
+
+        async function handleSubmitBid(e) {
+            e.preventDefault();
+            if (!userAccount) {
+                const connected = await connectWallet();
+                if (!connected) return;
+            }
+
+            const amount = document.getElementById("bidAmount").value.trim();
+            const proposal = document.getElementById("bidProposal").value.trim();
+            const days = parseInt(document.getElementById("bidDuration").value);
+
+            if (!amount || !proposal || !days) {
+                showTxError("Please fill in all bid fields.");
+                return;
+            }
+
+            const durationSeconds = days * 86400;
+
+            try {
+                await submitBid(JOB_ID, amount, proposal, durationSeconds);
+                setTimeout(() => loadJobDetail(), 2000);
+            } catch (err) { /* shown */ }
+        }
+
+        // Load on page ready
+        loadJobDetail();
+    </script>
+</body>
+</html>

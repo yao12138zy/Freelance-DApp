@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employer Dashboard - Freelance Marketplace</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="logo">Freelance Marketplace</a>
+        <div class="nav-links">
+            <a href="/">Jobs</a>
+            <a href="/post-job">Post Job</a>
+            <a href="/dashboard/employer">Employer</a>
+            <a href="/dashboard/freelancer">Freelancer</a>
+            <a href="/arbitrator">Arbitrator</a>
+        </div>
+        <div class="wallet-section">
+            <span id="walletAddress"></span>
+            <button id="connectWalletBtn" onclick="connectWallet()">Connect Wallet</button>
+        </div>
+    </nav>
+    <div id="notifications"></div>
+    <main class="container">
+        <div class="section-header">
+            <h1>Employer Dashboard</h1>
+            <p>Manage your posted jobs and track freelancer progress</p>
+        </div>
+
+        <div id="dashboardContent">
+            <p class="loading-text">Connect your wallet to view your posted jobs.</p>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+    <script src="/static/js/web3_connect.js"></script>
+    <script src="/static/js/employer.js"></script>
+    <script>
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function loadDashboard() {
+            if (!userAccount) {
+                document.getElementById("dashboardContent").innerHTML =
+                    '<p class="loading-text">Please connect your wallet to see your jobs.</p>';
+                return;
+            }
+
+            try {
+                const resp = await fetch("/api/jobs");
+                if (!resp.ok) throw new Error("Failed to fetch jobs");
+                const allJobs = await resp.json();
+
+                const myJobs = allJobs.filter(j =>
+                    j.employer && j.employer.toLowerCase() === userAccount.toLowerCase()
+                );
+
+                renderDashboard(myJobs);
+            } catch (err) {
+                document.getElementById("dashboardContent").innerHTML =
+                    '<p class="loading-text">Failed to load jobs.</p>';
+                console.error(err);
+            }
+        }
+
+        function renderDashboard(jobs) {
+            const container = document.getElementById("dashboardContent");
+
+            if (jobs.length === 0) {
+                container.innerHTML = `
+                    <div class="card" style="text-align:center;padding:3rem;">
+                        <h2>No Jobs Yet</h2>
+                        <p style="color:var(--color-text-light);margin:1rem 0;">You haven't posted any jobs.</p>
+                        <a href="/post-job" class="btn btn-primary">Post Your First Job</a>
+                    </div>
+                `;
+                return;
+            }
+
+            // Summary stats
+            const open = jobs.filter(j => parseInt(j.status) === 0).length;
+            const inProgress = jobs.filter(j => parseInt(j.status) === 1).length;
+            const completed = jobs.filter(j => parseInt(j.status) === 2).length;
+            const disputed = jobs.filter(j => parseInt(j.status) === 3).length;
+
+            let html = `
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem;">
+                    <div class="card" style="text-align:center;">
+                        <div style="font-size:2rem;font-weight:700;color:var(--color-primary);">${jobs.length}</div>
+                        <div style="font-size:0.85rem;color:var(--color-text-light);">Total Jobs</div>
+                    </div>
+                    <div class="card" style="text-align:center;">
+                        <div style="font-size:2rem;font-weight:700;color:#16a34a;">${open}</div>
+                        <div style="font-size:0.85rem;color:var(--color-text-light);">Open</div>
+                    </div>
+                    <div class="card" style="text-align:center;">
+                        <div style="font-size:2rem;font-weight:700;color:#2563eb;">${inProgress}</div>
+                        <div style="font-size:0.85rem;color:var(--color-text-light);">In Progress</div>
+                    </div>
+                    <div class="card" style="text-align:center;">
+                        <div style="font-size:2rem;font-weight:700;color:#dc2626;">${disputed}</div>
+                        <div style="font-size:0.85rem;color:var(--color-text-light);">Disputed</div>
+                    </div>
+                </div>
+            `;
+
+            // Jobs table
+            html += `
+                <div class="card">
+                    <h2 style="margin-bottom:1rem;">My Posted Jobs</h2>
+                    <div style="overflow-x:auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Title</th>
+                                    <th>Category</th>
+                                    <th>Budget (ETH)</th>
+                                    <th>Status</th>
+                                    <th>Milestones</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+
+            jobs.forEach(job => {
+                const budgetEth = weiToEth(job.totalBudget || job.budget || "0");
+                const status = parseInt(job.status || 0);
+                const milestoneCount = job.milestoneCount || (job.milestones ? job.milestones.length : 0);
+                html += `
+                    <tr>
+                        <td>${job.jobId}</td>
+                        <td>${escapeHtml(job.title || "Untitled")}</td>
+                        <td><span class="category-badge">${escapeHtml(job.category || "Other")}</span></td>
+                        <td>${budgetEth}</td>
+                        <td>${statusBadge(status)}</td>
+                        <td>${milestoneCount}</td>
+                        <td><a href="/job/${job.jobId}" class="btn btn-primary btn-sm">View</a></td>
+                    </tr>
+                `;
+            });
+
+            html += `</tbody></table></div></div>`;
+
+            container.innerHTML = html;
+        }
+
+        // Auto-load when wallet connects
+        const origUpdateWalletUI = updateWalletUI;
+        updateWalletUI = function() {
+            origUpdateWalletUI();
+            loadDashboard();
+        };
+
+        // Also try to load immediately if already connected
+        (async function() {
+            if (window.ethereum) {
+                try {
+                    const accounts = await window.ethereum.request({ method: "eth_accounts" });
+                    if (accounts.length > 0) {
+                        await connectWallet();
+                    }
+                } catch (e) { /* ignore */ }
+            }
+        })();
+    </script>
+</body>
+</html>

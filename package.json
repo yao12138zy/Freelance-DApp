@@ -1,0 +1,11 @@
+{
+  "name": "freelance-marketplace",
+  "version": "1.0.0",
+  "description": "Decentralized freelance marketplace on Ethereum",
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0"
+  },
+  "devDependencies": {
+    "truffle": "^5.11.0"
+  }
+}

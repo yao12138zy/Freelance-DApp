@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arbitrator Panel - Freelance Marketplace</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="logo">Freelance Marketplace</a>
+        <div class="nav-links">
+            <a href="/">Jobs</a>
+            <a href="/post-job">Post Job</a>
+            <a href="/dashboard/employer">Employer</a>
+            <a href="/dashboard/freelancer">Freelancer</a>
+            <a href="/arbitrator">Arbitrator</a>
+        </div>
+        <div class="wallet-section">
+            <span id="walletAddress"></span>
+            <button id="connectWalletBtn" onclick="connectWallet()">Connect Wallet</button>
+        </div>
+    </nav>
+    <div id="notifications"></div>
+    <main class="container">
+        <div class="section-header">
+            <h1>Arbitrator Panel</h1>
+            <p>Review disputed jobs and vote on resolutions. Disputes unresolved after 7 days can be claimed as a 50/50 split.</p>
+        </div>
+
+        <div id="disputesContent">
+            <p class="loading-text">Loading disputes...</p>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+    <script src="/static/js/web3_connect.js"></script>
+    <script src="/static/js/freelancer.js"></script>
+    <script>
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function loadDisputes() {
+            try {
+                const resp = await fetch("/api/disputes");
+                if (!resp.ok) throw new Error("Failed to fetch disputes");
+                const disputes = await resp.json();
+                renderDisputes(disputes);
+            } catch (err) {
+                document.getElementById("disputesContent").innerHTML =
+                    '<p class="loading-text">Failed to load disputes. Is the backend running?</p>';
+                console.error(err);
+            }
+        }
+
+        function renderDisputes(disputes) {
+            const container = document.getElementById("disputesContent");
+
+            if (!disputes || disputes.length === 0) {
+                container.innerHTML = `
+                    <div class="card" style="text-align:center;padding:3rem;">
+                        <h2>No Open Disputes</h2>
+                        <p style="color:var(--color-text-light);margin-top:0.5rem;">There are currently no disputed jobs requiring arbitration.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = "";
+
+            disputes.forEach(dispute => {
+                const job = dispute.job || dispute;
+                const budgetEth = weiToEth(job.totalBudget || job.budget || "0");
+                const disputeTime = dispute.disputeTime || dispute.timestamp || 0;
+                const nowSec = Math.floor(Date.now() / 1000);
+                const sevenDays = 7 * 24 * 60 * 60;
+                const isTimedOut = disputeTime > 0 && (nowSec - disputeTime) >= sevenDays;
+                const daysSince = disputeTime > 0 ? Math.floor((nowSec - disputeTime) / 86400) : 0;
+                const voteCount = dispute.voteCount || 0;
+                const resolved = dispute.resolved || false;
+
+                html += `
+                    <div class="card dispute-card">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+                            <div>
+                                <h3>
+                                    <a href="/job/${job.jobId}" style="color:var(--color-text);text-decoration:none;">
+                                        ${escapeHtml(job.title || "Job #" + job.jobId)}
+                                    </a>
+                                </h3>
+                                <span class="status-badge status-disputed">Disputed</span>
+                                ${resolved ? '<span class="status-badge status-completed">Resolved</span>' : ''}
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-weight:700;color:var(--color-primary);font-size:1.15rem;">${budgetEth} ETH</div>
+                                <div style="font-size:0.8rem;color:var(--color-text-light);">Escrowed</div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top:1rem;display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;font-size:0.9rem;">
+                            <div>
+                                <strong>Employer:</strong><br>
+                                <span style="font-family:monospace;font-size:0.85rem;">${shortAddress(job.employer)}</span>
+                            </div>
+                            <div>
+                                <strong>Freelancer:</strong><br>
+                                <span style="font-family:monospace;font-size:0.85rem;">${shortAddress(job.acceptedFreelancer || job.freelancer)}</span>
+                            </div>
+                            <div>
+                                <strong>Dispute Raised:</strong><br>
+                                ${formatTimestamp(disputeTime)} (${daysSince} days ago)
+                            </div>
+                            <div>
+                                <strong>Votes Cast:</strong><br>
+                                ${voteCount}
+                            </div>
+                        </div>
+                `;
+
+                // Vote form (only if not resolved)
+                if (!resolved) {
+                    html += `
+                        <div class="vote-form">
+                            <strong style="margin-right:0.5rem;">Vote for:</strong>
+                            <label>
+                                <input type="radio" name="vote-${job.jobId}" value="${job.employer}" />
+                                Employer
+                            </label>
+                            <label>
+                                <input type="radio" name="vote-${job.jobId}" value="${job.acceptedFreelancer || job.freelancer}" />
+                                Freelancer
+                            </label>
+                            <button class="btn btn-primary btn-sm" onclick="handleVote(${job.jobId})">Submit Vote</button>
+                        </div>
+                    `;
+
+                    // Timeout claim button
+                    if (isTimedOut) {
+                        html += `
+                            <div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--color-border);">
+                                <p style="font-size:0.85rem;color:var(--color-warning);margin-bottom:0.5rem;">
+                                    This dispute has been open for more than 7 days. Either party can claim a 50/50 split.
+                                </p>
+                                <button class="btn btn-warning btn-sm" onclick="handleClaimTimeout(${job.jobId})">Claim Timeout (50/50 Split)</button>
+                            </div>
+                        `;
+                    }
+                }
+
+                html += `</div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        async function handleVote(jobId) {
+            if (!userAccount) {
+                const connected = await connectWallet();
+                if (!connected) return;
+            }
+
+            const selected = document.querySelector(`input[name="vote-${jobId}"]:checked`);
+            if (!selected) {
+                showTxError("Please select who should win the dispute.");
+                return;
+            }
+
+            try {
+                await submitVote(jobId, selected.value);
+                setTimeout(() => loadDisputes(), 2000);
+            } catch (err) { /* shown */ }
+        }
+
+        async function handleClaimTimeout(jobId) {
+            if (!userAccount) {
+                const connected = await connectWallet();
+                if (!connected) return;
+            }
+
+            if (!confirm("Claim a 50/50 timeout split for this dispute?")) return;
+
+            try {
+                await claimTimeout(jobId);
+                setTimeout(() => loadDisputes(), 2000);
+            } catch (err) { /* shown */ }
+        }
+
+        // Load disputes on page load
+        loadDisputes();
+    </script>
+</body>
+</html>

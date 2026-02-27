@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Freelancer Dashboard - Freelance Marketplace</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="logo">Freelance Marketplace</a>
+        <div class="nav-links">
+            <a href="/">Jobs</a>
+            <a href="/post-job">Post Job</a>
+            <a href="/dashboard/employer">Employer</a>
+            <a href="/dashboard/freelancer">Freelancer</a>
+            <a href="/arbitrator">Arbitrator</a>
+        </div>
+        <div class="wallet-section">
+            <span id="walletAddress"></span>
+            <button id="connectWalletBtn" onclick="connectWallet()">Connect Wallet</button>
+        </div>
+    </nav>
+    <div id="notifications"></div>
+    <main class="container">
+        <div class="section-header">
+            <h1>Freelancer Dashboard</h1>
+            <p>Manage your profile, bids, and active jobs</p>
+        </div>
+
+        <div id="dashboardContent">
+            <p class="loading-text">Connect your wallet to view your dashboard.</p>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+    <script src="/static/js/web3_connect.js"></script>
+    <script src="/static/js/freelancer.js"></script>
+    <script>
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function loadDashboard() {
+            if (!userAccount) {
+                document.getElementById("dashboardContent").innerHTML =
+                    '<p class="loading-text">Please connect your wallet to see your dashboard.</p>';
+                return;
+            }
+
+            try {
+                const resp = await fetch("/api/jobs");
+                if (!resp.ok) throw new Error("Failed to fetch jobs");
+                const allJobs = await resp.json();
+
+                renderDashboard(allJobs);
+            } catch (err) {
+                document.getElementById("dashboardContent").innerHTML =
+                    '<p class="loading-text">Failed to load data.</p>';
+                console.error(err);
+            }
+        }
+
+        function renderDashboard(allJobs) {
+            const container = document.getElementById("dashboardContent");
+            const ua = userAccount.toLowerCase();
+
+            // Collect bids belonging to this user across all jobs
+            let myBids = [];
+            allJobs.forEach(job => {
+                (job.bids || []).forEach(bid => {
+                    if (bid.freelancer && bid.freelancer.toLowerCase() === ua) {
+                        myBids.push({ ...bid, jobTitle: job.title, jobId: job.jobId });
+                    }
+                });
+            });
+
+            // Active jobs where user is the accepted freelancer
+            const activeJobs = allJobs.filter(j =>
+                j.acceptedFreelancer && j.acceptedFreelancer.toLowerCase() === ua
+            );
+
+            let html = "";
+
+            // ── Profile Section ──
+            html += `
+                <div class="card">
+                    <h2>My Profile</h2>
+                    <div id="profileSection">
+                        <p style="color:var(--color-text-light);">Loading profile...</p>
+                    </div>
+                </div>
+            `;
+
+            // ── My Bids Table ──
+            html += `
+                <div class="card">
+                    <h2 style="margin-bottom:1rem;">My Bids (${myBids.length})</h2>
+            `;
+
+            if (myBids.length === 0) {
+                html += `<p style="color:var(--color-text-light);">You have not submitted any bids yet. Browse the <a href="/">job board</a> to get started.</p>`;
+            } else {
+                html += `
+                    <div style="overflow-x:auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Job</th>
+                                    <th>Bid Amount (ETH)</th>
+                                    <th>Status</th>
+                                    <th>Expires</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                myBids.forEach(bid => {
+                    const bidAmountEth = weiToEth(bid.amount || "0");
+                    const bidStatus = parseInt(bid.status || 0);
+                    html += `
+                        <tr>
+                            <td><a href="/job/${bid.jobId}">${escapeHtml(bid.jobTitle || "Job #" + bid.jobId)}</a></td>
+                            <td>${bidAmountEth}</td>
+                            <td>${statusBadge(bidStatus, "bid")}</td>
+                            <td>${formatTimestamp(bid.expiryTime || bid.expiry)}</td>
+                            <td>
+                                <a href="/job/${bid.jobId}" class="btn btn-primary btn-sm">View Job</a>
+                                ${bidStatus === 3 ? `<button class="btn btn-secondary btn-sm" onclick="handleWithdraw(${bid.bidId})">Withdraw</button>` : ""}
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += `</tbody></table></div>`;
+            }
+
+            html += `</div>`;
+
+            // ── Active Jobs Section ──
+            html += `
+                <div class="card">
+                    <h2 style="margin-bottom:1rem;">Active Jobs (${activeJobs.length})</h2>
+            `;
+
+            if (activeJobs.length === 0) {
+                html += `<p style="color:var(--color-text-light);">No active jobs. Get a bid accepted to start working.</p>`;
+            } else {
+                activeJobs.forEach(job => {
+                    const budgetEth = weiToEth(job.totalBudget || job.budget || "0");
+                    const status = parseInt(job.status || 0);
+                    const milestones = job.milestones || [];
+                    const completedMs = milestones.filter(m => m.isCompleted || m.completed).length;
+                    const progressPct = milestones.length > 0 ? Math.round((completedMs / milestones.length) * 100) : 0;
+
+                    html += `
+                        <div style="border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;margin-bottom:1rem;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+                                <div>
+                                    <h3 style="margin-bottom:0.25rem;">
+                                        <a href="/job/${job.jobId}" style="color:var(--color-text);text-decoration:none;">${escapeHtml(job.title || "Untitled")}</a>
+                                    </h3>
+                                    <span class="category-badge">${escapeHtml(job.category || "Other")}</span>
+                                    ${statusBadge(status)}
+                                </div>
+                                <div style="font-weight:700;color:var(--color-primary);">${budgetEth} ETH</div>
+                            </div>
+                            <div class="milestone-tracker" style="margin-top:1rem;">
+                                <div class="milestone-progress-bar">
+                                    <div class="milestone-progress-fill" style="width:${progressPct}%"></div>
+                                </div>
+                                <p style="font-size:0.8rem;color:var(--color-text-light);">${completedMs} / ${milestones.length} milestones completed</p>
+                            </div>
+                            <div style="margin-top:0.75rem;">
+                                <a href="/job/${job.jobId}" class="btn btn-primary btn-sm">View Details</a>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            html += `</div>`;
+
+            container.innerHTML = html;
+
+            // Load profile info
+            loadProfile();
+        }
+
+        async function loadProfile() {
+            const profileSection = document.getElementById("profileSection");
+            if (!profileSection || !marketplaceContract) {
+                if (profileSection) {
+                    profileSection.innerHTML = `
+                        <p style="color:var(--color-text-light);margin-bottom:1rem;">Connect wallet and ensure contract is loaded to manage your profile.</p>
+                        <form onsubmit="handleCreateProfile(event)">
+                            <div class="form-group">
+                                <label for="profileName">Display Name</label>
+                                <input type="text" id="profileName" required placeholder="Your name" />
+                            </div>
+                            <div class="form-group">
+                                <label for="profileBio">Bio</label>
+                                <textarea id="profileBio" required placeholder="Tell employers about your skills and experience..."></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Create Profile</button>
+                        </form>
+                    `;
+                }
+                return;
+            }
+
+            try {
+                const profile = await marketplaceContract.methods.getProfile(userAccount).call();
+                if (profile && profile.name && profile.name.length > 0) {
+                    profileSection.innerHTML = `
+                        <div style="display:flex;gap:1.5rem;align-items:flex-start;flex-wrap:wrap;">
+                            <div>
+                                <h3>${escapeHtml(profile.name)}</h3>
+                                <p style="color:var(--color-text-light);margin-top:0.25rem;">${escapeHtml(profile.bio || "No bio provided.")}</p>
+                                ${profile.rating ? `<p style="margin-top:0.5rem;">Rating: ${"&#9733;".repeat(Math.round(parseInt(profile.rating)))} (${profile.rating})</p>` : ""}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    throw new Error("No profile");
+                }
+            } catch (err) {
+                profileSection.innerHTML = `
+                    <p style="color:var(--color-text-light);margin-bottom:1rem;">You don't have a profile yet. Create one to start bidding.</p>
+                    <form onsubmit="handleCreateProfile(event)">
+                        <div class="form-group">
+                            <label for="profileName">Display Name</label>
+                            <input type="text" id="profileName" required placeholder="Your name" />
+                        </div>
+                        <div class="form-group">
+                            <label for="profileBio">Bio</label>
+                            <textarea id="profileBio" required placeholder="Tell employers about your skills and experience..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Create Profile</button>
+                    </form>
+                `;
+            }
+        }
+
+        async function handleCreateProfile(e) {
+            e.preventDefault();
+            if (!userAccount) {
+                const connected = await connectWallet();
+                if (!connected) return;
+            }
+            const name = document.getElementById("profileName").value.trim();
+            const bio = document.getElementById("profileBio").value.trim();
+            if (!name || !bio) {
+                showTxError("Please fill in both name and bio.");
+                return;
+            }
+            try {
+                await createProfile(name, bio);
+                setTimeout(() => loadDashboard(), 2000);
+            } catch (err) { /* shown */ }
+        }
+
+        async function handleWithdraw(bidId) {
+            try {
+                await withdrawExpiredBid(bidId);
+                setTimeout(() => loadDashboard(), 2000);
+            } catch (err) { /* shown */ }
+        }
+
+        // Auto-load when wallet connects
+        const origUpdateWalletUI = updateWalletUI;
+        updateWalletUI = function() {
+            origUpdateWalletUI();
+            loadDashboard();
+        };
+
+        // Try auto-connect
+        (async function() {
+            if (window.ethereum) {
+                try {
+                    const accounts = await window.ethereum.request({ method: "eth_accounts" });
+                    if (accounts.length > 0) {
+                        await connectWallet();
+                    }
+                } catch (e) { /* ignore */ }
+            }
+        })();
+    </script>
+</body>
+</html>

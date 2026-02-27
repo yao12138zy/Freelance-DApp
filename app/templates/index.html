@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Board - Freelance Marketplace</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="logo">Freelance Marketplace</a>
+        <div class="nav-links">
+            <a href="/">Jobs</a>
+            <a href="/post-job">Post Job</a>
+            <a href="/dashboard/employer">Employer</a>
+            <a href="/dashboard/freelancer">Freelancer</a>
+            <a href="/arbitrator">Arbitrator</a>
+        </div>
+        <div class="wallet-section">
+            <span id="walletAddress"></span>
+            <button id="connectWalletBtn" onclick="connectWallet()">Connect Wallet</button>
+        </div>
+    </nav>
+    <div id="notifications"></div>
+    <main class="container">
+        <div class="section-header">
+            <h1>Browse Jobs</h1>
+            <p>Find freelance opportunities paid in ETH with milestone-based escrow</p>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+            <input type="text" id="filterKeyword" placeholder="Search by keyword..." />
+            <select id="filterCategory">
+                <option value="">All Categories</option>
+                <option value="Web Dev">Web Dev</option>
+                <option value="Mobile">Mobile</option>
+                <option value="Design">Design</option>
+                <option value="Writing">Writing</option>
+                <option value="Data">Data</option>
+                <option value="Blockchain">Blockchain</option>
+                <option value="Other">Other</option>
+            </select>
+            <label style="font-size:0.85rem;color:#64748b;">Min ETH</label>
+            <input type="number" id="filterMinBudget" placeholder="0" step="0.01" min="0" style="max-width:100px;" />
+            <label style="font-size:0.85rem;color:#64748b;">Max ETH</label>
+            <input type="number" id="filterMaxBudget" placeholder="100" step="0.01" min="0" style="max-width:100px;" />
+            <button class="btn btn-primary btn-sm" onclick="applyFilters()">Filter</button>
+        </div>
+
+        <!-- Jobs Grid -->
+        <div class="jobs-grid" id="jobsGrid">
+            <p class="loading-text">Loading jobs...</p>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+    <script src="/static/js/web3_connect.js"></script>
+    <script>
+        let allJobs = [];
+
+        async function loadJobs() {
+            try {
+                const resp = await fetch("/api/jobs");
+                if (!resp.ok) throw new Error("Failed to fetch jobs");
+                allJobs = await resp.json();
+                applyFilters();
+            } catch (err) {
+                document.getElementById("jobsGrid").innerHTML =
+                    '<p class="loading-text">Failed to load jobs. Is the backend running?</p>';
+                console.error(err);
+            }
+        }
+
+        function applyFilters() {
+            const keyword = document.getElementById("filterKeyword").value.toLowerCase().trim();
+            const category = document.getElementById("filterCategory").value;
+            const minBudget = parseFloat(document.getElementById("filterMinBudget").value) || 0;
+            const maxBudget = parseFloat(document.getElementById("filterMaxBudget").value) || Infinity;
+
+            const filtered = allJobs.filter(job => {
+                const title = (job.title || "").toLowerCase();
+                const budgetEth = parseFloat(weiToEth(job.totalBudget || job.budget || "0"));
+                if (keyword && !title.includes(keyword)) return false;
+                if (category && job.category !== category) return false;
+                if (budgetEth < minBudget || budgetEth > maxBudget) return false;
+                return true;
+            });
+
+            renderJobs(filtered);
+        }
+
+        function renderJobs(jobs) {
+            const grid = document.getElementById("jobsGrid");
+            if (jobs.length === 0) {
+                grid.innerHTML = '<p class="loading-text">No jobs found matching your criteria.</p>';
+                return;
+            }
+
+            grid.innerHTML = jobs.map(job => {
+                const budgetEth = weiToEth(job.totalBudget || job.budget || "0");
+                const status = parseInt(job.status || 0);
+                const milestoneCount = job.milestoneCount || (job.milestones ? job.milestones.length : 0);
+                return `
+                    <div class="card job-card" onclick="window.location='/job/${job.jobId}'">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <h3>${escapeHtml(job.title || "Untitled Job")}</h3>
+                            ${statusBadge(status)}
+                        </div>
+                        <div style="margin:0.5rem 0;">
+                            <span class="category-badge">${escapeHtml(job.category || "Other")}</span>
+                        </div>
+                        <div class="budget">${budgetEth} ETH</div>
+                        <div class="card-meta">
+                            <span>Milestones: ${milestoneCount}</span>
+                            <span>Deadline: ${formatTimestamp(job.deadline)}</span>
+                            <span>Employer: ${shortAddress(job.employer)}</span>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Listen for filter changes on typing/select
+        document.getElementById("filterKeyword").addEventListener("input", applyFilters);
+        document.getElementById("filterCategory").addEventListener("change", applyFilters);
+        document.getElementById("filterMinBudget").addEventListener("input", applyFilters);
+        document.getElementById("filterMaxBudget").addEventListener("input", applyFilters);
+
+        // Load jobs on page load
+        loadJobs();
+    </script>
+</body>
+</html>

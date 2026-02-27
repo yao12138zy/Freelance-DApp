@@ -1,0 +1,334 @@
+/* style.css — Freelance Marketplace DApp */
+
+/* ── CSS Variables ── */
+:root {
+    --color-primary: #2563eb;
+    --color-primary-dark: #1d4ed8;
+    --color-primary-light: #dbeafe;
+    --color-header: #0f172a;
+    --color-bg: #f1f5f9;
+    --color-white: #ffffff;
+    --color-text: #1e293b;
+    --color-text-light: #64748b;
+    --color-border: #e2e8f0;
+    --color-success: #16a34a;
+    --color-error: #dc2626;
+    --color-warning: #f59e0b;
+    --color-info: #2563eb;
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text);
+    line-height: 1.6;
+}
+
+/* ── Navbar ── */
+.navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--color-header);
+    padding: 0 2rem;
+    height: 60px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+.navbar .logo {
+    color: var(--color-white);
+    font-size: 1.2rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+.nav-links { display: flex; gap: 1.25rem; }
+.nav-links a {
+    color: #cbd5e1;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: color 0.2s;
+}
+.nav-links a:hover { color: var(--color-white); }
+.wallet-section { display: flex; align-items: center; gap: 0.75rem; }
+#walletAddress { color: #94a3b8; font-size: 0.85rem; font-family: monospace; }
+#connectWalletBtn {
+    background: var(--color-primary);
+    color: var(--color-white);
+    border: none;
+    padding: 0.45rem 1rem;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+#connectWalletBtn:hover { background: var(--color-primary-dark); }
+#connectWalletBtn.connected { background: var(--color-success); cursor: default; }
+
+/* ── Container ── */
+.container { max-width: 1140px; margin: 2rem auto; padding: 0 1.5rem; }
+
+/* ── Cards ── */
+.card {
+    background: var(--color-white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.5rem;
+    margin-bottom: 1.25rem;
+    border: 1px solid var(--color-border);
+}
+.card:hover { box-shadow: var(--shadow-md); }
+.card h3 { margin-bottom: 0.5rem; }
+.card-meta { color: var(--color-text-light); font-size: 0.85rem; display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem; }
+
+/* ── Job Cards Grid ── */
+.jobs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.25rem; }
+.job-card { cursor: pointer; transition: transform 0.15s; }
+.job-card:hover { transform: translateY(-2px); }
+.job-card .budget { font-size: 1.15rem; font-weight: 700; color: var(--color-primary); }
+
+/* ── Category Badges ── */
+.category-badge {
+    display: inline-block;
+    background: var(--color-primary-light);
+    color: var(--color-primary-dark);
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* ── Status Badges ── */
+.status-badge {
+    display: inline-block;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.status-open { background: #dcfce7; color: #15803d; }
+.status-inprogress { background: #dbeafe; color: #1d4ed8; }
+.status-completed { background: #f1f5f9; color: #475569; }
+.status-disputed { background: #fee2e2; color: #b91c1c; }
+.status-cancelled { background: #ffedd5; color: #c2410c; }
+.status-pending { background: #fef9c3; color: #a16207; }
+.status-accepted { background: #dcfce7; color: #15803d; }
+.status-rejected { background: #fee2e2; color: #b91c1c; }
+.status-expired { background: #f1f5f9; color: #64748b; }
+
+/* ── Filter Bar ── */
+.filter-bar {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding: 1rem 1.25rem;
+    background: var(--color-white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+.filter-bar input, .filter-bar select {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    background: var(--color-white);
+}
+.filter-bar input:focus, .filter-bar select:focus { outline: none; border-color: var(--color-primary); }
+
+/* ── Forms ── */
+.form-group { margin-bottom: 1.25rem; }
+.form-group label { display: block; font-weight: 600; margin-bottom: 0.35rem; font-size: 0.9rem; }
+.form-group input, .form-group select, .form-group textarea {
+    width: 100%;
+    padding: 0.6rem 0.85rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.95rem;
+    transition: border 0.2s;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+}
+.form-group textarea { resize: vertical; min-height: 80px; }
+
+/* ── Buttons ── */
+.btn {
+    display: inline-block;
+    padding: 0.55rem 1.25rem;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--color-primary); color: var(--color-white); }
+.btn-primary:hover { background: var(--color-primary-dark); }
+.btn-success { background: var(--color-success); color: var(--color-white); }
+.btn-success:hover { background: #15803d; }
+.btn-danger { background: var(--color-error); color: var(--color-white); }
+.btn-danger:hover { background: #b91c1c; }
+.btn-warning { background: var(--color-warning); color: var(--color-white); }
+.btn-secondary { background: #64748b; color: var(--color-white); }
+.btn-secondary:hover { background: #475569; }
+.btn-sm { padding: 0.3rem 0.75rem; font-size: 0.8rem; }
+.btn-outline {
+    background: transparent;
+    border: 2px solid var(--color-primary);
+    color: var(--color-primary);
+}
+.btn-outline:hover { background: var(--color-primary); color: var(--color-white); }
+
+/* ── Milestone Tracker ── */
+.milestone-tracker { margin: 1.5rem 0; }
+.milestone-progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--color-border);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+.milestone-progress-fill {
+    height: 100%;
+    background: var(--color-success);
+    border-radius: 999px;
+    transition: width 0.4s ease;
+}
+.milestone-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--color-border);
+}
+.milestone-item:last-child { border-bottom: none; }
+.milestone-check {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 0.75rem;
+    flex-shrink: 0;
+    font-size: 0.75rem;
+}
+.milestone-check.done { background: var(--color-success); border-color: var(--color-success); color: #fff; }
+.milestone-check.paid { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.milestone-info { flex: 1; }
+.milestone-info .ms-desc { font-weight: 500; }
+.milestone-info .ms-amount { font-size: 0.85rem; color: var(--color-text-light); }
+.milestone-actions { display: flex; gap: 0.5rem; }
+
+/* ── Star Rating ── */
+.star-rating { display: inline-flex; flex-direction: row-reverse; gap: 0.15rem; }
+.star-rating input { display: none; }
+.star-rating label {
+    cursor: pointer;
+    font-size: 1.5rem;
+    color: #d1d5db;
+    transition: color 0.15s;
+}
+.star-rating label::before { content: "\2605"; }
+.star-rating input:checked ~ label,
+.star-rating label:hover,
+.star-rating label:hover ~ label { color: #f59e0b; }
+
+/* ── Tables ── */
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th, .data-table td {
+    text-align: left;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.9rem;
+}
+.data-table th { font-weight: 600; color: var(--color-text-light); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.data-table tbody tr:hover { background: #f8fafc; }
+
+/* ── Notifications / Toasts ── */
+#notifications { position: fixed; top: 68px; right: 1.5rem; z-index: 200; display: flex; flex-direction: column; gap: 0.5rem; max-width: 400px; }
+.notification {
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    font-weight: 500;
+    box-shadow: var(--shadow-md);
+    animation: slideIn 0.3s ease;
+}
+.notification-success { background: #dcfce7; color: #15803d; border-left: 4px solid var(--color-success); }
+.notification-error { background: #fee2e2; color: #b91c1c; border-left: 4px solid var(--color-error); }
+.notification-info { background: #dbeafe; color: #1d4ed8; border-left: 4px solid var(--color-info); }
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* ── Section Headers ── */
+.section-header { margin-bottom: 1.25rem; }
+.section-header h1, .section-header h2 { margin-bottom: 0.25rem; }
+.section-header p { color: var(--color-text-light); }
+
+/* ── Bid List ── */
+.bid-item {
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    margin-bottom: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+.bid-item .bid-details { flex: 1; }
+.bid-item .bid-amount { font-weight: 700; color: var(--color-primary); font-size: 1.05rem; }
+.bid-item .bid-proposal { color: var(--color-text-light); font-size: 0.9rem; margin-top: 0.25rem; }
+.bid-item .bid-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+
+/* ── Dynamic Milestone Form Row ── */
+.milestone-row { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem; }
+.milestone-row input { flex: 1; }
+.milestone-row .eth-input { max-width: 140px; }
+.total-budget { font-size: 1.25rem; font-weight: 700; color: var(--color-primary); margin: 1rem 0; }
+
+/* ── Dispute Card ── */
+.dispute-card { border-left: 4px solid var(--color-error); }
+.dispute-card .vote-form { margin-top: 1rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+.dispute-card .vote-form label { display: flex; align-items: center; gap: 0.35rem; cursor: pointer; }
+
+/* ── Loading State ── */
+.loading-text { text-align: center; padding: 3rem; color: var(--color-text-light); }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .navbar { flex-direction: column; height: auto; padding: 0.75rem 1rem; gap: 0.5rem; }
+    .nav-links { gap: 0.75rem; flex-wrap: wrap; justify-content: center; }
+    .filter-bar { flex-direction: column; }
+    .filter-bar input, .filter-bar select { width: 100%; }
+    .jobs-grid { grid-template-columns: 1fr; }
+    .bid-item { flex-direction: column; }
+    .milestone-row { flex-direction: column; }
+    .milestone-row .eth-input { max-width: 100%; }
+    .data-table { font-size: 0.8rem; }
+    .data-table th, .data-table td { padding: 0.5rem; }
+}
+
+@media (max-width: 480px) {
+    .container { padding: 0 0.75rem; margin: 1rem auto; }
+    .card { padding: 1rem; }
+}

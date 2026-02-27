@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Post a Job - Freelance Marketplace</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="logo">Freelance Marketplace</a>
+        <div class="nav-links">
+            <a href="/">Jobs</a>
+            <a href="/post-job">Post Job</a>
+            <a href="/dashboard/employer">Employer</a>
+            <a href="/dashboard/freelancer">Freelancer</a>
+            <a href="/arbitrator">Arbitrator</a>
+        </div>
+        <div class="wallet-section">
+            <span id="walletAddress"></span>
+            <button id="connectWalletBtn" onclick="connectWallet()">Connect Wallet</button>
+        </div>
+    </nav>
+    <div id="notifications"></div>
+    <main class="container">
+        <div class="section-header">
+            <h1>Post a New Job</h1>
+            <p>Define milestones and fund the escrow to attract freelancers</p>
+        </div>
+
+        <div class="card" style="max-width:720px;">
+            <form id="postJobForm" onsubmit="handlePostJob(event)">
+                <div class="form-group">
+                    <label for="jobTitle">Job Title</label>
+                    <input type="text" id="jobTitle" required placeholder="e.g. Build a React Dashboard" />
+                </div>
+
+                <div class="form-group">
+                    <label for="jobCategory">Category</label>
+                    <select id="jobCategory" required>
+                        <option value="">Select a category</option>
+                        <option value="Web Dev">Web Dev</option>
+                        <option value="Mobile">Mobile</option>
+                        <option value="Design">Design</option>
+                        <option value="Writing">Writing</option>
+                        <option value="Data">Data</option>
+                        <option value="Blockchain">Blockchain</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="jobDeadline">Deadline</label>
+                    <input type="date" id="jobDeadline" required />
+                </div>
+
+                <div class="form-group">
+                    <label>Milestones</label>
+                    <div id="milestonesContainer">
+                        <div class="milestone-row">
+                            <input type="text" placeholder="Milestone description" class="ms-desc" required />
+                            <input type="number" placeholder="ETH" step="0.001" min="0.001" class="ms-amount eth-input" required />
+                            <button type="button" class="btn btn-danger btn-sm" onclick="removeMilestone(this)">Remove</button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="addMilestone()" style="margin-top:0.5rem;">+ Add Milestone</button>
+                </div>
+
+                <div class="total-budget">
+                    Total Budget: <span id="totalBudget">0</span> ETH
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width:100%;padding:0.75rem;">Post Job &amp; Fund Escrow</button>
+            </form>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.10.0/dist/web3.min.js"></script>
+    <script src="/static/js/web3_connect.js"></script>
+    <script src="/static/js/employer.js"></script>
+    <script>
+        function addMilestone() {
+            const container = document.getElementById("milestonesContainer");
+            const row = document.createElement("div");
+            row.className = "milestone-row";
+            row.innerHTML = `
+                <input type="text" placeholder="Milestone description" class="ms-desc" required />
+                <input type="number" placeholder="ETH" step="0.001" min="0.001" class="ms-amount eth-input" required />
+                <button type="button" class="btn btn-danger btn-sm" onclick="removeMilestone(this)">Remove</button>
+            `;
+            container.appendChild(row);
+            updateTotal();
+        }
+
+        function removeMilestone(btn) {
+            const container = document.getElementById("milestonesContainer");
+            if (container.children.length <= 1) {
+                showTxError("You need at least one milestone.");
+                return;
+            }
+            btn.parentElement.remove();
+            updateTotal();
+        }
+
+        function updateTotal() {
+            const amounts = document.querySelectorAll(".ms-amount");
+            let total = 0;
+            amounts.forEach(input => {
+                total += parseFloat(input.value) || 0;
+            });
+            document.getElementById("totalBudget").textContent = total.toFixed(4);
+        }
+
+        // Listen for amount changes
+        document.getElementById("milestonesContainer").addEventListener("input", function(e) {
+            if (e.target.classList.contains("ms-amount")) updateTotal();
+        });
+
+        async function handlePostJob(e) {
+            e.preventDefault();
+
+            if (!userAccount) {
+                const connected = await connectWallet();
+                if (!connected) return;
+            }
+
+            const title = document.getElementById("jobTitle").value.trim();
+            const category = document.getElementById("jobCategory").value;
+            const deadlineDate = document.getElementById("jobDeadline").value;
+
+            if (!title || !category || !deadlineDate) {
+                showTxError("Please fill in all fields.");
+                return;
+            }
+
+            const deadline = Math.floor(new Date(deadlineDate).getTime() / 1000);
+            if (deadline <= Math.floor(Date.now() / 1000)) {
+                showTxError("Deadline must be in the future.");
+                return;
+            }
+
+            const descInputs = document.querySelectorAll(".ms-desc");
+            const amountInputs = document.querySelectorAll(".ms-amount");
+            const milestoneDescs = [];
+            const milestoneAmountsEth = [];
+
+            for (let i = 0; i < descInputs.length; i++) {
+                const desc = descInputs[i].value.trim();
+                const amt = amountInputs[i].value.trim();
+                if (!desc || !amt || parseFloat(amt) <= 0) {
+                    showTxError("All milestones must have a description and a positive ETH amount.");
+                    return;
+                }
+                milestoneDescs.push(desc);
+                milestoneAmountsEth.push(amt);
+            }
+
+            try {
+                await postJob(title, category, deadline, milestoneDescs, milestoneAmountsEth);
+                showTxSuccess("Redirecting to dashboard...");
+                setTimeout(() => window.location.href = "/dashboard/employer", 2000);
+            } catch (err) {
+                // Error already shown by postJob
+            }
+        }
+
+        // Set minimum date to today
+        const today = new Date().toISOString().split("T")[0];
+        document.getElementById("jobDeadline").setAttribute("min", today);
+    </script>
+</body>
+</html>
