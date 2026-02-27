@@ -29,7 +29,7 @@
         </div>
 
         <div id="disputesContent">
-            <p class="loading-text">Loading disputes...</p>
+            <p class="loading-text loading-spinner">Loading disputes...</p>
         </div>
     </main>
 
@@ -51,7 +51,7 @@
                 renderDisputes(disputes);
             } catch (err) {
                 document.getElementById("disputesContent").innerHTML =
-                    '<p class="loading-text">Failed to load disputes. Is the backend running?</p>';
+                    '<div class="empty-state"><h2>Connection Error</h2><p>Failed to load disputes. Is the backend running?</p></div>';
                 console.error(err);
             }
         }
@@ -63,7 +63,7 @@
                 container.innerHTML = `
                     <div class="card" style="text-align:center;padding:3rem;">
                         <h2>No Open Disputes</h2>
-                        <p style="color:var(--color-text-light);margin-top:0.5rem;">There are currently no disputed jobs requiring arbitration.</p>
+                        <p style="color:var(--text-secondary);margin-top:0.5rem;">There are currently no disputed jobs requiring arbitration.</p>
                     </div>
                 `;
                 return;
@@ -87,7 +87,7 @@
                         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
                             <div>
                                 <h3>
-                                    <a href="/job/${job.jobId}" style="color:var(--color-text);text-decoration:none;">
+                                    <a href="/job/${job.jobId}" style="color:var(--text-primary);text-decoration:none;">
                                         ${escapeHtml(job.title || "Job #" + job.jobId)}
                                     </a>
                                 </h3>
@@ -95,8 +95,8 @@
                                 ${resolved ? '<span class="status-badge status-completed">Resolved</span>' : ''}
                             </div>
                             <div style="text-align:right;">
-                                <div style="font-weight:700;color:var(--color-primary);font-size:1.15rem;">${budgetEth} ETH</div>
-                                <div style="font-size:0.8rem;color:var(--color-text-light);">Escrowed</div>
+                                <div style="font-weight:700;color:var(--mint);font-size:1.15rem;">${budgetEth} ETH</div>
+                                <div style="font-size:0.8rem;color:var(--text-secondary);">Escrowed</div>
                             </div>
                         </div>
 
@@ -140,8 +140,8 @@
                     // Timeout claim button
                     if (isTimedOut) {
                         html += `
-                            <div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--color-border);">
-                                <p style="font-size:0.85rem;color:var(--color-warning);margin-bottom:0.5rem;">
+                            <div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--border);">
+                                <p style="font-size:0.85rem;color:var(--amber);margin-bottom:0.5rem;">
                                     This dispute has been open for more than 7 days. Either party can claim a 50/50 split.
                                 </p>
                                 <button class="btn btn-warning btn-sm" onclick="handleClaimTimeout(${job.jobId})">Claim Timeout (50/50 Split)</button>

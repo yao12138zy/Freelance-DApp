@@ -29,7 +29,7 @@
         </div>
 
         <div id="dashboardContent">
-            <p class="loading-text">Connect your wallet to view your posted jobs.</p>
+            <div class="empty-state"><h2>Connect Wallet</h2><p>Connect your wallet to view your posted jobs.</p></div>
         </div>
     </main>
 
@@ -46,7 +46,7 @@
         async function loadDashboard() {
             if (!userAccount) {
                 document.getElementById("dashboardContent").innerHTML =
-                    '<p class="loading-text">Please connect your wallet to see your jobs.</p>';
+                    '<div class="empty-state"><h2>Connect Wallet</h2><p>Please connect your wallet to see your jobs.</p></div>';
                 return;
             }
 
@@ -62,7 +62,7 @@
                 renderDashboard(myJobs);
             } catch (err) {
                 document.getElementById("dashboardContent").innerHTML =
-                    '<p class="loading-text">Failed to load jobs.</p>';
+                    '<div class="empty-state"><h2>Error</h2><p>Failed to load jobs.</p></div>';
                 console.error(err);
             }
         }
@@ -72,9 +72,9 @@
 
             if (jobs.length === 0) {
                 container.innerHTML = `
-                    <div class="card" style="text-align:center;padding:3rem;">
+                    <div class="card empty-state">
                         <h2>No Jobs Yet</h2>
-                        <p style="color:var(--color-text-light);margin:1rem 0;">You haven't posted any jobs.</p>
+                        <p>You haven't posted any jobs.</p>
                         <a href="/post-job" class="btn btn-primary">Post Your First Job</a>
                     </div>
                 `;
@@ -88,22 +88,22 @@
             const disputed = jobs.filter(j => parseInt(j.status) === 3).length;
 
             let html = `
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem;">
-                    <div class="card" style="text-align:center;">
-                        <div style="font-size:2rem;font-weight:700;color:var(--color-primary);">${jobs.length}</div>
-                        <div style="font-size:0.85rem;color:var(--color-text-light);">Total Jobs</div>
+                <div class="stat-grid">
+                    <div class="card stat-card">
+                        <div class="stat-value" style="color:var(--text-primary);">${jobs.length}</div>
+                        <div class="stat-label">Total Jobs</div>
                     </div>
-                    <div class="card" style="text-align:center;">
-                        <div style="font-size:2rem;font-weight:700;color:#16a34a;">${open}</div>
-                        <div style="font-size:0.85rem;color:var(--color-text-light);">Open</div>
+                    <div class="card stat-card">
+                        <div class="stat-value" style="color:var(--mint);">${open}</div>
+                        <div class="stat-label">Open</div>
                     </div>
-                    <div class="card" style="text-align:center;">
-                        <div style="font-size:2rem;font-weight:700;color:#2563eb;">${inProgress}</div>
-                        <div style="font-size:0.85rem;color:var(--color-text-light);">In Progress</div>
+                    <div class="card stat-card">
+                        <div class="stat-value" style="color:var(--cyan);">${inProgress}</div>
+                        <div class="stat-label">In Progress</div>
                     </div>
-                    <div class="card" style="text-align:center;">
-                        <div style="font-size:2rem;font-weight:700;color:#dc2626;">${disputed}</div>
-                        <div style="font-size:0.85rem;color:var(--color-text-light);">Disputed</div>
+                    <div class="card stat-card">
+                        <div class="stat-value" style="color:var(--red);">${disputed}</div>
+                        <div class="stat-label">Disputed</div>
                     </div>
                 </div>
             `;

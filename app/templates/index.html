@@ -50,7 +50,7 @@
 
         <!-- Jobs Grid -->
         <div class="jobs-grid" id="jobsGrid">
-            <p class="loading-text">Loading jobs...</p>
+            <p class="loading-text loading-spinner">Loading jobs...</p>
         </div>
     </main>
 
@@ -67,7 +67,7 @@
                 applyFilters();
             } catch (err) {
                 document.getElementById("jobsGrid").innerHTML =
-                    '<p class="loading-text">Failed to load jobs. Is the backend running?</p>';
+                    '<div class="empty-state"><h2>Connection Error</h2><p>Failed to load jobs. Is the backend running?</p></div>';
                 console.error(err);
             }
         }
@@ -93,7 +93,7 @@
         function renderJobs(jobs) {
             const grid = document.getElementById("jobsGrid");
             if (jobs.length === 0) {
-                grid.innerHTML = '<p class="loading-text">No jobs found matching your criteria.</p>';
+                grid.innerHTML = '<div class="empty-state"><h2>No Jobs Found</h2><p>No jobs found matching your criteria.</p><a href="/post-job" class="btn btn-primary" style="margin-top:1rem;">Post a Job</a></div>';
                 return;
             }
 

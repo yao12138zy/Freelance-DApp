@@ -110,6 +110,86 @@ except Exception:
     pass
 
 # ---------------------------------------------------------------------------
+# In-Memory Cache
+# ---------------------------------------------------------------------------
+
+_cache = {}
+_cache_lock = threading.Lock()
+CACHE_TTL = 3  # seconds
+
+
+def cache_get(key):
+    """Return cached value if still valid, else None."""
+    with _cache_lock:
+        entry = _cache.get(key)
+        if entry and (time.time() - entry["ts"]) < CACHE_TTL:
+            return entry["data"]
+    return None
+
+
+def cache_set(key, data):
+    """Store data in cache with current timestamp."""
+    with _cache_lock:
+        _cache[key] = {"data": data, "ts": time.time()}
+
+
+def cache_invalidate():
+    """Clear all cached data (called by event indexer on new blocks)."""
+    with _cache_lock:
+        _cache.clear()
+
+# ---------------------------------------------------------------------------
+# Shared Helpers — build dicts from contract tuples
+# ---------------------------------------------------------------------------
+
+def _job_dict(job):
+    """Convert a getJob() tuple into a flat dict."""
+    bid_ids = []
+    milestone_ids = list(job[8])
+    try:
+        bid_ids = list(marketplace_contract.functions.getJobBids(job[0]).call())
+    except Exception:
+        pass
+    return {
+        "jobId": job[0],
+        "employer": job[1],
+        "title": job[2],
+        "category": job[3],
+        "totalBudget": str(job[4]),
+        "deadline": job[5],
+        "status": job[6],
+        "acceptedFreelancer": job[7],
+        "milestoneIds": milestone_ids,
+        "milestoneCount": len(milestone_ids),
+        "bidCount": len(bid_ids),
+    }
+
+
+def _bid_dict(bid):
+    """Convert a bids() tuple into a dict."""
+    return {
+        "bidId": bid[0],
+        "jobId": bid[1],
+        "freelancer": bid[2],
+        "amount": str(bid[3]),
+        "proposal": bid[4],
+        "expiryTime": bid[5],
+        "status": bid[6],
+    }
+
+
+def _milestone_dict(ms_id, ms):
+    """Convert a milestones() tuple into a dict."""
+    return {
+        "milestoneId": ms_id,
+        "jobId": ms[0],
+        "description": ms[1],
+        "amount": str(ms[2]),
+        "completed": ms[3],
+        "paid": ms[4],
+    }
+
+# ---------------------------------------------------------------------------
 # Config API
 # ---------------------------------------------------------------------------
 
@@ -170,26 +250,22 @@ def arbitrator():
 
 @app.route("/api/jobs")
 def api_jobs():
-    """Return all jobs."""
+    """Return all jobs with milestone/bid counts."""
     if not marketplace_contract:
         return jsonify([])
+
+    cached = cache_get("all_jobs")
+    if cached is not None:
+        return jsonify(cached)
+
     try:
         job_count = marketplace_contract.functions.jobCount().call()
         jobs_list = []
         for i in range(1, job_count + 1):
             job = marketplace_contract.functions.getJob(i).call()
-            # getJob returns a tuple matching the Job struct
-            jobs_list.append({
-                "jobId": job[0],
-                "employer": job[1],
-                "title": job[2],
-                "category": job[3],
-                "totalBudget": str(job[4]),   # wei as string
-                "deadline": job[5],
-                "status": job[6],
-                "acceptedFreelancer": job[7],
-                "milestoneIds": list(job[8]),
-            })
+            jobs_list.append(_job_dict(job))
+
+        cache_set("all_jobs", jobs_list)
         return jsonify(jobs_list)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -200,23 +276,21 @@ def api_jobs_by_category(category):
     """Return jobs filtered by category."""
     if not marketplace_contract:
         return jsonify([])
+
+    cache_key = f"jobs_cat_{category.lower()}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return jsonify(cached)
+
     try:
         job_count = marketplace_contract.functions.jobCount().call()
         jobs_list = []
         for i in range(1, job_count + 1):
             job = marketplace_contract.functions.getJob(i).call()
             if job[3].lower() == category.lower():
-                jobs_list.append({
-                    "jobId": job[0],
-                    "employer": job[1],
-                    "title": job[2],
-                    "category": job[3],
-                    "totalBudget": str(job[4]),
-                    "deadline": job[5],
-                    "status": job[6],
-                    "acceptedFreelancer": job[7],
-                    "milestoneIds": list(job[8]),
-                })
+                jobs_list.append(_job_dict(job))
+
+        cache_set(cache_key, jobs_list)
         return jsonify(jobs_list)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -224,56 +298,29 @@ def api_jobs_by_category(category):
 
 @app.route("/api/job/<int:job_id>")
 def api_job_detail(job_id):
-    """Return job details together with its bids and milestones."""
+    """Return flat job object with nested bids and milestones arrays."""
     if not marketplace_contract:
         return jsonify({"error": "Contract not connected"}), 503
     try:
         job = marketplace_contract.functions.getJob(job_id).call()
+        result = _job_dict(job)
 
         # --- Bids ---
         bid_ids = marketplace_contract.functions.getJobBids(job_id).call()
         bids_list = []
         for bid_id in bid_ids:
             bid = marketplace_contract.functions.bids(bid_id).call()
-            bids_list.append({
-                "bidId": bid[0],
-                "jobId": bid[1],
-                "freelancer": bid[2],
-                "amount": str(bid[3]),
-                "proposal": bid[4],
-                "expiresAt": bid[5],
-                "status": bid[6],
-            })
+            bids_list.append(_bid_dict(bid))
+        result["bids"] = bids_list
 
         # --- Milestones ---
-        milestone_ids = list(job[8])
         milestones_list = []
-        for ms_id in milestone_ids:
+        for ms_id in result["milestoneIds"]:
             ms = marketplace_contract.functions.milestones(ms_id).call()
-            milestones_list.append({
-                "milestoneId": ms_id,
-                "jobId": ms[0],
-                "description": ms[1],
-                "amount": str(ms[2]),
-                "completed": ms[3],
-                "paid": ms[4],
-            })
+            milestones_list.append(_milestone_dict(ms_id, ms))
+        result["milestones"] = milestones_list
 
-        return jsonify({
-            "job": {
-                "jobId": job[0],
-                "employer": job[1],
-                "title": job[2],
-                "category": job[3],
-                "totalBudget": str(job[4]),
-                "deadline": job[5],
-                "status": job[6],
-                "acceptedFreelancer": job[7],
-                "milestoneIds": milestone_ids,
-            },
-            "bids": bids_list,
-            "milestones": milestones_list,
-        })
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -301,7 +348,7 @@ def api_profile(address):
 
 @app.route("/api/disputes")
 def api_disputes():
-    """Return jobs whose status is Disputed (enum value 3)."""
+    """Return disputed jobs with arbitration vote data."""
     if not marketplace_contract:
         return jsonify([])
     try:
@@ -310,13 +357,26 @@ def api_disputes():
         for i in range(1, job_count + 1):
             job = marketplace_contract.functions.getJob(i).call()
             if job[6] == 3:  # JobStatus.Disputed == 3
-                disputes.append({
-                    "jobId": job[0],
-                    "employer": job[1],
-                    "title": job[2],
-                    "totalBudget": str(job[4]),
-                    "acceptedFreelancer": job[7],
-                })
+                entry = _job_dict(job)
+
+                # Fetch arbitration data if contract is available
+                if arbitration_contract:
+                    try:
+                        dv = arbitration_contract.functions.disputes(i).call()
+                        # DisputeVote struct: (jobId, voteCount, resolved, raisedAt)
+                        entry["voteCount"] = dv[1]
+                        entry["resolved"] = dv[2]
+                        entry["disputeTime"] = dv[3]
+                    except Exception:
+                        entry["voteCount"] = 0
+                        entry["resolved"] = False
+                        entry["disputeTime"] = 0
+                else:
+                    entry["voteCount"] = 0
+                    entry["resolved"] = False
+                    entry["disputeTime"] = 0
+
+                disputes.append(entry)
         return jsonify(disputes)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -418,13 +478,12 @@ def tx_validate():
 
 # Simple in-memory event index for the MVP
 event_index = {
-    "jobs": {},
     "last_processed_block": 0,
 }
 
 
 def run_event_indexer():
-    """Background thread that periodically indexes contract events."""
+    """Background thread that polls for new blocks and invalidates cache."""
     global event_index
 
     while True:
@@ -434,27 +493,14 @@ def run_event_indexer():
                 continue
 
             latest_block = w3.eth.block_number
-            from_block = event_index["last_processed_block"] + 1
+            last = event_index["last_processed_block"]
 
-            if from_block > latest_block:
-                time.sleep(2)
-                continue
+            if latest_block > last:
+                # New block(s) detected — invalidate cache so next API
+                # request fetches fresh on-chain data.
+                cache_invalidate()
+                event_index["last_processed_block"] = latest_block
 
-            # Index JobPosted events
-            events = marketplace_contract.events.JobPosted().get_logs(
-                fromBlock=from_block,
-                toBlock=latest_block,
-            )
-            for evt in events:
-                job_id = evt["args"]["jobId"]
-                event_index["jobs"][job_id] = {
-                    "employer": evt["args"]["employer"],
-                    "category": evt["args"]["category"],
-                    "totalBudget": str(evt["args"]["totalBudget"]),
-                    "blockNumber": evt["blockNumber"],
-                }
-
-            event_index["last_processed_block"] = latest_block
         except Exception as e:
             print(f"Indexer error: {e}")
 
