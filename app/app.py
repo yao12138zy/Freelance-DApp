@@ -42,12 +42,13 @@ def load_contract(artifact_name):
 
     abi = artifact["abi"]
 
-    # Get deployed address from networks (Ganache default chainId 1337)
+    # Get deployed address from networks
     networks = artifact.get("networks", {})
-    network_id = "1337"
-    if network_id not in networks:
-        # Fall back to whichever network entry exists
-        network_id = list(networks.keys())[0] if networks else None
+    
+    # Prefer 1337, otherwise use the most recent deployment
+    network_id = "1337" if "1337" in networks else None
+    if not network_id and networks:
+        network_id = list(networks.keys())[-1]
 
     address = None
     deployment_block = 0
@@ -263,17 +264,20 @@ def api_jobs():
         jobs_list = []
         for i in range(1, job_count + 1):
             job = marketplace_contract.functions.getJob(i).call()
-            jobs_list.append(_job_dict(job))
+            job_dict = _job_dict(job)
+
+            milestones_list = []
+            for ms_id in job_dict["milestoneIds"]:
+                ms = marketplace_contract.functions.milestones(ms_id).call()
+                milestones_list.append(_milestone_dict(ms_id, ms))
+            job_dict["milestones"] = milestones_list
+
+            jobs_list.append(job_dict)
 
         cache_set("all_jobs", jobs_list)
         return jsonify(jobs_list)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/jobs/category/<category>")
-def api_jobs_by_category(category):
-    """Return jobs filtered by category."""
     if not marketplace_contract:
         return jsonify([])
 
